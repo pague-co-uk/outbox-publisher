@@ -1,0 +1,935 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider     = "mysql"
+  url          = env("DATABASE_URL")
+  relationMode = "foreignKeys"
+}
+
+enum ClientStatus {
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum OutboxEventStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+  FAILED
+}
+
+enum UserStatus {
+  ACTIVE
+  LOCKED
+  DISABLED
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum SmppAccountStatus {
+  ACTIVE
+  DISABLED
+  SUSPENDED
+}
+
+enum SenderIdStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  DISABLED
+}
+
+enum MessageStatus {
+  QUEUED
+  ROUTED
+  SUBMITTED
+  DELIVERED
+  FAILED
+  EXPIRED
+}
+
+enum MessageAttemptStatus {
+  PENDING
+  SUBMITTED
+  FAILED
+}
+
+enum LedgerTransactionType {
+  TOPUP
+  DEBIT
+  REFUND
+  ADJUSTMENT
+}
+
+enum LedgerReferenceType {
+  MESSAGE
+  ADMIN
+  SYSTEM
+  IMPORT
+}
+
+enum AuthenticationEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  SESSION_REVOKED
+  API_KEY_CREATED
+  API_KEY_REVOKED
+  API_KEY_ROTATED
+  PASSWORD_CHANGED
+  REFRESH_TOKEN_ROTATED
+  MFA_CHALLENGE_CREATED
+  MFA_VERIFIED
+  REFRESH_TOKEN_ISSUED
+  REFRESH_TOKEN_REVOKED
+  LOGOUT_ALL
+}
+
+enum MessageEncoding {
+  GSM7
+  UCS2
+  BINARY
+}
+
+enum MfaMethod {
+  EMAIL
+  SMS
+}
+
+enum VerificationPurpose {
+  LOGIN
+  PASSWORD_RESET
+  EMAIL_VERIFICATION
+  PHONE_VERIFICATION
+}
+
+enum VerificationChannel {
+  EMAIL
+  SMS
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  EXPIRED
+  CANCELLED
+  FAILED
+}
+
+enum AuthenticationMethod {
+  PASSWORD
+  API_KEY
+  REFRESH_TOKEN
+  SESSION
+  SMPP
+  SYSTEM
+}
+
+model VerificationChallenge {
+  id String @id @default(uuid()) @db.Char(36)
+
+  userId String @db.Char(36)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  codeHash String @db.VarChar(255)
+
+  purpose VerificationPurpose
+
+  channel VerificationChannel
+
+  status VerificationStatus @default(PENDING)
+
+  attempts Int @default(0)
+
+  expiresAt DateTime
+
+  verifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([status])
+  @@index([userId, purpose])
+  @@map("verification_challenges")
+}
+
+model TrustedDevice {
+  id String @id @default(uuid()) @db.Char(36)
+
+  userId String @db.Char(36)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  deviceId String @unique @db.VarChar(64)
+
+  deviceName String? @db.VarChar(255)
+
+  userAgent String? @db.VarChar(512)
+
+  ipAddress String? @db.VarChar(45)
+
+  expiresAt DateTime
+
+  lastUsedAt DateTime
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  sessions PortalSession[]
+
+  @@index([userId])
+  @@map("trusted_devices")
+}
+
+model Client {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Public Identifier
+  publicId String @unique @db.VarChar(20)
+
+  /// Company Information
+  companyName String @db.VarChar(255)
+  displayName String @db.VarChar(255)
+
+  /// Contact Information
+  email String  @unique @db.VarChar(255)
+  phone String? @db.VarChar(30)
+
+  /// Configuration
+  status             ClientStatus @default(ACTIVE)
+  rateLimitPerSecond Int          @default(20)
+  timezone           String       @default("Europe/London") @db.VarChar(64)
+  /// Extension Point
+  metadata           Json?
+
+  /// Audit
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  users                User[]
+  apiKeys              ApiKey[]
+  authenticationEvents AuthenticationEvent[]
+  floatLedgerEntries   FloatLedgerEntry[]
+  messages             Message[]
+  smppAccounts         SmppAccount[]
+  senderIds            SenderId[]
+  webhookEndpoints     WebhookEndpoint[]
+  auditLogs            AuditLog[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("clients")
+}
+
+model User {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Foreign Keys
+  clientId String @db.Char(36)
+
+  /// Business Fields
+  firstName String @db.VarChar(100)
+
+  lastName String @db.VarChar(100)
+
+  username String @unique @db.VarChar(100)
+
+  email String @unique @db.VarChar(255)
+
+  phone String? @db.VarChar(30)
+
+  mfaEnabled Boolean @default(false)
+
+  preferredMfaMethod MfaMethod?
+
+  emailVerifiedAt DateTime?
+
+  phoneVerifiedAt DateTime?
+
+  failedLoginAttempts Int @default(0)
+
+  lockedUntil DateTime?
+
+  /// Authentication
+  passwordHash String @db.VarChar(255)
+
+  /// Status
+  status UserStatus @default(ACTIVE)
+
+  /// Activity
+  lastLoginAt DateTime?
+
+  /// Relationships
+  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  userRoles UserRole[] @relation("UserRoles")
+
+  portalSessions PortalSession[]
+
+  authenticationEvents AuthenticationEvent[]
+
+  floatLedgerEntries FloatLedgerEntry[]
+
+  verificationChallenges VerificationChallenge[]
+
+  trustedDevices TrustedDevice[]
+
+  auditLogs AuditLog[]
+
+  /// Audit
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, email])
+  @@index([clientId])
+  @@index([status])
+  @@index([lastLoginAt])
+  @@map("users")
+}
+
+model Role {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Business Fields
+  name String @unique @db.VarChar(100)
+
+  description String? @db.VarChar(255)
+
+  system Boolean @default(true)
+
+  /// Relationships
+  userRoles UserRole[]
+
+  permissions RolePermission[]
+
+  /// Audit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("roles")
+}
+
+model Permission {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Business Fields
+  name String @unique @db.VarChar(100)
+
+  module String @db.VarChar(100)
+
+  description String? @db.VarChar(255)
+
+  /// Relationships
+  roles RolePermission[]
+
+  /// Audit
+  createdAt DateTime @default(now())
+
+  @@index([module])
+  @@map("permissions")
+}
+
+model UserRole {
+  /// Foreign Keys
+  userId String @db.Char(36)
+
+  roleId String @db.Char(36)
+
+  /// Relationships
+  user User @relation("UserRoles", fields: [userId], references: [id], onDelete: Cascade)
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  /// Audit
+  assignedAt DateTime @default(now())
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  /// Foreign Keys
+  roleId String @db.Char(36)
+
+  permissionId String @db.Char(36)
+
+  /// Relationships
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  /// Audit
+  assignedAt DateTime @default(now())
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model ApiKey {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Public Identifier
+  publicId String @unique @db.VarChar(20)
+
+  /// Foreign Keys
+  clientId String @db.Char(36)
+
+  /// Relationships
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Business Fields
+  name String @db.VarChar(100)
+
+  prefix String @unique @db.VarChar(20)
+
+  secretHash String @db.VarChar(255)
+
+  status ApiKeyStatus @default(ACTIVE)
+
+  /// Activity
+  lastUsedAt DateTime?
+
+  expiresAt DateTime?
+
+  revokedAt DateTime?
+
+  /// Audit
+  createdAt DateTime @default(now())
+
+  updatedAt    DateTime                     @updatedAt
+  capabilities ApiKeyCapabilityAssignment[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("api_keys")
+}
+
+model PortalSession {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Foreign Keys
+  userId String @db.Char(36)
+
+  /// Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  refreshTokens RefreshToken[]
+
+  /// Session
+  sessionTokenHash String @db.VarChar(255)
+
+  ipAddress String? @db.VarChar(45)
+
+  userAgent String? @db.VarChar(512)
+
+  lastActivityAt DateTime @default(now())
+
+  expiresAt DateTime
+
+  revokedAt DateTime?
+
+  trustedDeviceId String? @db.Char(36)
+
+  trustedDevice TrustedDevice? @relation(fields: [trustedDeviceId], references: [id], onDelete: SetNull)
+
+  authenticatedWithMfa Boolean @default(false)
+
+  /// Audit
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([lastActivityAt])
+  @@index([trustedDeviceId])
+  @@map("portal_sessions")
+}
+
+model RefreshToken {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Foreign Keys
+  sessionId String @db.Char(36)
+
+  replacedById String? @db.Char(36)
+
+  /// Relationships
+  session PortalSession @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  replacedBy RefreshToken? @relation("RefreshTokenReplacement", fields: [replacedById], references: [id])
+
+  previous RefreshToken[] @relation("RefreshTokenReplacement")
+
+  /// Token
+  tokenHash String @unique @db.VarChar(255)
+
+  expiresAt DateTime
+
+  revokedAt DateTime?
+
+  /// Audit
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([expiresAt])
+  @@index([replacedById])
+  @@map("refresh_tokens")
+}
+
+model AuthenticationEvent {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Foreign Keys
+  userId String? @db.Char(36)
+
+  clientId String? @db.Char(36)
+
+  authenticationMethod AuthenticationMethod
+
+  sessionId String?
+  /// Relationships
+  user      User?   @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Event
+  type AuthenticationEventType
+
+  /// Context
+  ipAddress String? @db.VarChar(45)
+
+  userAgent String? @db.VarChar(512)
+
+  failureReason String? @db.VarChar(255)
+
+  /// Audit
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([clientId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("authentication_events")
+}
+
+model FloatLedgerEntry {
+  id String @id @default(uuid()) @db.Char(36)
+
+  publicId String @unique @db.VarChar(20)
+
+  clientId    String  @db.Char(36)
+  createdById String? @db.Char(36)
+
+  client    Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdBy User?  @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  transactionType LedgerTransactionType
+
+  credits Int
+
+  referenceType LedgerReferenceType
+  referenceId   String?             @db.Char(36)
+
+  description String? @db.VarChar(255)
+
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+  @@index([transactionType])
+  @@index([referenceType])
+  @@index([referenceId])
+  @@map("float_ledger_entries")
+}
+
+model Message {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Public Identifier
+  publicId String @unique @db.VarChar(20)
+
+  /// Foreign Keys
+  clientId   String  @db.Char(36)
+  senderIdId String? @db.Char(36)
+
+  /// Relationships
+  client   Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  senderId SenderId? @relation(fields: [senderIdId], references: [id], onDelete: SetNull)
+
+  attempts     MessageAttempt[]
+  statusEvents MessageStatusEvent[]
+
+  /// Recipient
+  destination String @db.VarChar(20)
+
+  /// Message Content
+  body String @db.Text
+
+  encoding MessageEncoding
+
+  segmentCount Int
+
+  /// Current State
+  currentStatus MessageStatus @default(QUEUED)
+
+  /// Submission
+  submittedAt DateTime @default(now())
+
+  /// Audit
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  webhookDeliveries WebhookDelivery[]
+
+  @@index([clientId])
+  @@index([destination])
+  @@index([currentStatus])
+  @@index([submittedAt])
+  @@map("messages")
+}
+
+model MessageAttempt {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Foreign Keys
+  messageId String @db.Char(36)
+
+  /// Relationships
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Attempt
+  attemptNumber Int
+
+  status MessageAttemptStatus @default(PENDING)
+
+  /// Routing
+  provider String @db.VarChar(50)
+
+  route String? @db.VarChar(100)
+
+  /// Provider
+  providerMessageId String? @db.VarChar(100)
+
+  /// Failure
+  errorCode String? @db.VarChar(50)
+
+  errorMessage String? @db.VarChar(255)
+
+  /// Timing
+  startedAt DateTime @default(now())
+
+  completedAt DateTime?
+
+  /// Audit
+  createdAt           DateTime             @default(now())
+  messageStatusEvents MessageStatusEvent[]
+
+  @@unique([messageId, attemptNumber])
+  @@index([messageId])
+  @@index([status])
+  @@index([provider])
+  @@index([providerMessageId])
+  @@map("message_attempts")
+}
+
+model MessageStatusEvent {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Foreign Keys
+  messageId String @db.Char(36)
+
+  attemptId String? @db.Char(36)
+
+  /// Relationships
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  attempt MessageAttempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Status
+  status MessageStatus
+
+  /// Source
+  source String @db.VarChar(50)
+
+  /// Additional Information
+  description String? @db.VarChar(255)
+
+  rawData Json?
+
+  /// Audit
+  createdAt DateTime @default(now())
+
+  @@index([messageId])
+  @@index([attemptId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("message_status_events")
+}
+
+model SmppAccount {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Public Identifier
+  publicId String @unique @db.VarChar(20)
+
+  /// Foreign Keys
+  clientId String @db.Char(36)
+
+  /// Relationships
+  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// Credentials
+  systemId String @unique @db.VarChar(50)
+
+  passwordHash String @db.VarChar(255)
+
+  /// Configuration
+  status SmppAccountStatus @default(ACTIVE)
+
+  maxConcurrentBinds Int @default(1)
+
+  enquireLinkInterval Int @default(30)
+
+  /// Audit
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([status])
+  @@map("smpp_accounts")
+}
+
+model SenderId {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Public Identifier
+  publicId String @unique @db.VarChar(20)
+
+  /// Foreign Keys
+  clientId String @db.Char(36)
+
+  /// Relationships
+  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  messages Message[]
+
+  /// Sender
+  sender String @db.VarChar(20)
+
+  status SenderIdStatus @default(PENDING)
+
+  isDefault Boolean @default(false)
+
+  /// Audit
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, sender])
+  @@index([clientId])
+  @@index([status])
+  @@map("sender_ids")
+}
+
+model WebhookEndpoint {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Public Identifier
+  publicId String @unique @db.VarChar(20)
+
+  /// Foreign Keys
+  clientId String @db.Char(36)
+
+  /// Relationships
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  deliveries WebhookDelivery[]
+
+  /// Configuration
+  name String @db.VarChar(100)
+
+  url String @db.VarChar(2048)
+
+  secret String @db.VarChar(255)
+
+  enabled Boolean @default(true)
+
+  /// Audit
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([enabled])
+  @@map("webhook_endpoints")
+}
+
+model WebhookDelivery {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Foreign Keys
+  webhookEndpointId String @db.Char(36)
+
+  messageId String @db.Char(36)
+
+  /// Relationships
+  webhookEndpoint WebhookEndpoint @relation(fields: [webhookEndpointId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Delivery
+  attemptNumber Int @default(1)
+
+  responseCode Int?
+
+  responseBody String? @db.Text
+
+  /// Audit
+  attemptedAt DateTime @default(now())
+
+  @@index([webhookEndpointId])
+  @@index([messageId])
+  @@map("webhook_deliveries")
+}
+
+model AuditLog {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Foreign Keys
+  clientId String? @db.Char(36)
+
+  userId String? @db.Char(36)
+
+  /// Relationships
+  client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  /// Entity
+  entityType String @db.VarChar(100)
+
+  entityId String @db.Char(36)
+
+  action String @db.VarChar(100)
+
+  /// Changes
+  oldValues Json?
+
+  newValues Json?
+
+  /// Context
+  ipAddress String? @db.VarChar(45)
+
+  userAgent String? @db.VarChar(512)
+
+  /// Audit
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model ApiKeyCapability {
+  id String @id @default(uuid()) @db.Char(36)
+
+  name String @unique @db.VarChar(100)
+
+  module String @db.VarChar(100)
+
+  description String @db.VarChar(255)
+
+  apiKeys ApiKeyCapabilityAssignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([module])
+  @@map("api_key_capabilities")
+}
+
+model ApiKeyCapabilityAssignment {
+  apiKeyId     String @db.Char(36)
+  capabilityId String @db.Char(36)
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  capability ApiKeyCapability @relation(fields: [capabilityId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([apiKeyId, capabilityId])
+  @@index([capabilityId])
+  @@map("api_key_capability_assignments")
+}
+
+model OutboxEvent {
+  /// Primary Key
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Event
+  eventType String @db.VarChar(100)
+
+  aggregateType String @db.VarChar(100)
+
+  aggregateId String @db.Char(36)
+
+  /// Queue
+  queueName String @db.VarChar(100)
+
+  /// Payload
+  payload Json
+
+  /// Processing
+  status OutboxEventStatus @default(PENDING)
+
+  attempts Int @default(0)
+
+  availableAt DateTime @default(now())
+
+  publishedAt DateTime?
+
+  lastError String? @db.VarChar(1000)
+
+  /// Audit
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  processingAt DateTime?
+
+  @@index([status, availableAt])
+  @@index([aggregateType, aggregateId])
+  @@index([eventType])
+  @@map("outbox_events")
+}

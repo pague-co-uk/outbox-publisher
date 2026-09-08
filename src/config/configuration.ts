@@ -1,4 +1,8 @@
 export default () => ({
+  // ===========================================================================
+  // Application
+  // ===========================================================================
+
   app: {
     name:
       process.env.APP_NAME ??
@@ -11,12 +15,31 @@ export default () => ({
     environment:
       process.env.NODE_ENV ??
       "development",
+
+    host:
+      process.env.APP_HOST ??
+      "0.0.0.0",
+
+    port:
+      Number.parseInt(
+        process.env.APP_PORT ??
+        "9002",
+        10,
+      ),
   },
+
+  // ===========================================================================
+  // Database
+  // ===========================================================================
 
   database: {
     url:
       process.env.DATABASE_URL!,
   },
+
+  // ===========================================================================
+  // RabbitMQ
+  // ===========================================================================
 
   rabbitmq: {
     url:
@@ -57,6 +80,10 @@ export default () => ({
         : undefined,
   },
 
+  // ===========================================================================
+  // Telemetry
+  // ===========================================================================
+
   telemetry: {
     enabled:
       process.env.OTEL_ENABLED !==
@@ -71,13 +98,16 @@ export default () => ({
       "1.0.0",
 
     tracesEndpoint:
-      process.env.OTEL_TRACES_ENDPOINT!,
+      process.env.OTEL_TRACES_ENDPOINT ??
+      "",
 
     metricsEndpoint:
-      process.env.OTEL_METRICS_ENDPOINT!,
+      process.env.OTEL_METRICS_ENDPOINT ??
+      "",
 
     logsEndpoint:
-      process.env.OTEL_LOGS_ENDPOINT!,
+      process.env.OTEL_LOGS_ENDPOINT ??
+      "",
 
     exportIntervalMillis:
       Number.parseInt(
@@ -92,6 +122,10 @@ export default () => ({
         .OTEL_DISABLE_FS_INSTRUMENTATION ===
       "true",
   },
+
+  // ===========================================================================
+  // Logging
+  // ===========================================================================
 
   log: {
     level:
@@ -112,6 +146,10 @@ export default () => ({
         "./logs/outbox-publisher.log",
     },
   },
+
+  // ===========================================================================
+  // Outbox
+  // ===========================================================================
 
   outbox: {
     batchSize:

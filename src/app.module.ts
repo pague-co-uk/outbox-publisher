@@ -11,6 +11,10 @@ import {
 } from "./database/database.module.js";
 
 import {
+  HealthModule,
+} from "./health/health.module.js";
+
+import {
   QueueModule,
 } from "./queue/queue.module.js";
 
@@ -24,6 +28,7 @@ import {
     DatabaseModule,
     QueueModule,
     OutboxModule,
+    HealthModule,
   ],
 })
 export class AppModule { }

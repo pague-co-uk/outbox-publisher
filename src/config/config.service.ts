@@ -17,10 +17,33 @@ export class AppConfigService {
   // Application
   // =========================================================================
 
-  get nodeEnv(): string {
-    return this.config.getOrThrow<string>(
-      "nodeEnv",
-    );
+  get app() {
+    return {
+      name:
+        this.config.getOrThrow<string>(
+          "app.name",
+        ),
+
+      version:
+        this.config.getOrThrow<string>(
+          "app.version",
+        ),
+
+      environment:
+        this.config.getOrThrow<string>(
+          "app.environment",
+        ),
+
+      host:
+        this.config.getOrThrow<string>(
+          "app.host",
+        ),
+
+      port:
+        this.config.getOrThrow<number>(
+          "app.port",
+        ),
+    };
   }
 
   // =========================================================================

@@ -14,6 +14,23 @@ export const configValidationSchema =
       )
       .default("development"),
 
+    APP_NAME: Joi.string()
+      .default(
+        "outbox-publisher",
+      ),
+
+    APP_VERSION: Joi.string()
+      .default("1.0.0"),
+
+    APP_HOST: Joi.string()
+      .default("0.0.0.0"),
+
+    APP_PORT: Joi.number()
+      .integer()
+      .min(1)
+      .max(65535)
+      .default(9002),
+
     // =========================================================================
     // Database
     // =========================================================================

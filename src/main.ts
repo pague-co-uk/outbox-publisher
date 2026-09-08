@@ -13,6 +13,10 @@ async function bootstrap(): Promise<void> {
   const config =
     configuration();
 
+  // =========================================================================
+  // Telemetry MUST be initialized before Nest creates providers.
+  // =========================================================================
+
   initTelemetry({
     enabled:
       config.telemetry.enabled,
@@ -68,6 +72,10 @@ async function bootstrap(): Promise<void> {
   const logger =
     getLogger();
 
+  // =========================================================================
+  // Nest
+  // =========================================================================
+
   const [
     { NestFactory },
     { AppModule },
@@ -77,12 +85,17 @@ async function bootstrap(): Promise<void> {
   ]);
 
   const app =
-    await NestFactory.createApplicationContext(
+    await NestFactory.create(
       AppModule,
     );
 
   app.useLogger(
     new TelemetryLogger(),
+  );
+
+  await app.listen(
+    config.app.port,
+    config.app.host,
   );
 
   logger.info(
@@ -92,16 +105,34 @@ async function bootstrap(): Promise<void> {
 
       version:
         config.app.version,
+
+      environment:
+        config.app.environment,
+
+      host:
+        config.app.host,
+
+      port:
+        config.app.port,
+
+      healthEndpoint:
+        "/health",
     },
     "Outbox publisher started successfully.",
   );
+
+  // =========================================================================
+  // Shutdown
+  // =========================================================================
 
   const gracefulShutdown =
     async (
       signal: string,
     ): Promise<void> => {
       logger.info(
-        { signal },
+        {
+          signal,
+        },
         "Shutting down outbox publisher.",
       );
 

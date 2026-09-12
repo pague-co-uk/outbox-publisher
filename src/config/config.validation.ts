@@ -45,6 +45,60 @@ export const configValidationSchema =
     RABBITMQ_URL: Joi.string()
       .required(),
 
+    RABBITMQ_CONNECTION_NAME:
+      Joi.string()
+        .default(
+          "outbox-publisher",
+        ),
+
+    RABBITMQ_HEARTBEAT:
+      Joi.number()
+        .integer()
+        .min(0)
+        .default(60),
+
+    RABBITMQ_RECONNECT_DELAY:
+      Joi.number()
+        .integer()
+        .min(0)
+        .default(1000),
+
+    RABBITMQ_MAX_RECONNECT_DELAY:
+      Joi.number()
+        .integer()
+        .min(0)
+        .default(30000),
+
+    RABBITMQ_MAX_RECONNECT_ATTEMPTS:
+      Joi.number()
+        .integer()
+        .min(0)
+        .optional(),
+
+    RABBITMQ_AUTO_CREATE_QUEUES:
+      Joi.boolean()
+        .truthy(
+          "true",
+          "1",
+        )
+        .falsy(
+          "false",
+          "0",
+        )
+        .default(true),
+
+    RABBITMQ_AUTO_RECOVER:
+      Joi.boolean()
+        .truthy(
+          "true",
+          "1",
+        )
+        .falsy(
+          "false",
+          "0",
+        )
+        .default(true),
+
     // =========================================================================
     // Outbox
     // =========================================================================

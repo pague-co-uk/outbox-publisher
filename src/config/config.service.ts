@@ -66,6 +66,36 @@ export class AppConfigService {
         this.config.getOrThrow<string>(
           "rabbitmq.url",
         ),
+
+      connectionName:
+        this.config.getOrThrow<string>(
+          "rabbitmq.connectionName",
+        ),
+
+      heartbeat:
+        this.config.getOrThrow<number>(
+          "rabbitmq.heartbeat",
+        ),
+
+      reconnectDelay:
+        this.config.getOrThrow<number>(
+          "rabbitmq.reconnectDelay",
+        ),
+
+      maxReconnectDelay:
+        this.config.getOrThrow<number>(
+          "rabbitmq.maxReconnectDelay",
+        ),
+
+      maxReconnectAttempts:
+        this.config.get<number>(
+          "rabbitmq.maxReconnectAttempts",
+        ),
+
+      autoRecover:
+        this.config.getOrThrow<boolean>(
+          "rabbitmq.autoRecover",
+        ),
     };
   }
 

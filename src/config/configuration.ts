@@ -78,6 +78,11 @@ export default () => ({
           10,
         )
         : undefined,
+
+    autoRecover:
+      process.env
+        .RABBITMQ_AUTO_RECOVER !==
+      "false",
   },
 
   // ===========================================================================

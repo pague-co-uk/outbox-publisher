@@ -117,8 +117,8 @@ export default () => ({
     exportIntervalMillis:
       Number.parseInt(
         process.env
-          .OTEL_EXPORT_INTERVAL_MILLIS ??
-        "10000",
+          .OTEL_METRICS_EXPORT_INTERVAL_MILLIS ??
+        "60000",
         10,
       ),
 
@@ -148,7 +148,7 @@ export default () => ({
 
       path:
         process.env.LOG_FILE_PATH ??
-        "./logs/outbox-publisher.log",
+        "/var/log/pague/outbox-publisher/application.log",
     },
   },
 

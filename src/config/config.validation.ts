@@ -6,44 +6,51 @@ export const configValidationSchema =
     // Application
     // =========================================================================
 
-    NODE_ENV: Joi.string()
-      .valid(
-        "development",
-        "test",
-        "production",
-      )
-      .default("development"),
+    NODE_ENV:
+      Joi.string()
+        .valid(
+          "development",
+          "test",
+          "production",
+        )
+        .default("development"),
 
-    APP_NAME: Joi.string()
-      .default(
-        "outbox-publisher",
-      ),
+    APP_NAME:
+      Joi.string()
+        .default(
+          "outbox-publisher",
+        ),
 
-    APP_VERSION: Joi.string()
-      .default("1.0.0"),
+    APP_VERSION:
+      Joi.string()
+        .default("1.0.0"),
 
-    APP_HOST: Joi.string()
-      .default("0.0.0.0"),
+    APP_HOST:
+      Joi.string()
+        .default("0.0.0.0"),
 
-    APP_PORT: Joi.number()
-      .integer()
-      .min(1)
-      .max(65535)
-      .default(9002),
+    APP_PORT:
+      Joi.number()
+        .integer()
+        .min(1)
+        .max(65535)
+        .default(9002),
 
     // =========================================================================
     // Database
     // =========================================================================
 
-    DATABASE_URL: Joi.string()
-      .required(),
+    DATABASE_URL:
+      Joi.string()
+        .required(),
 
     // =========================================================================
     // RabbitMQ
     // =========================================================================
 
-    RABBITMQ_URL: Joi.string()
-      .required(),
+    RABBITMQ_URL:
+      Joi.string()
+        .required(),
 
     RABBITMQ_CONNECTION_NAME:
       Joi.string()
@@ -72,20 +79,9 @@ export const configValidationSchema =
     RABBITMQ_MAX_RECONNECT_ATTEMPTS:
       Joi.number()
         .integer()
-        .min(0)
+        .min(1)
+        .empty("")
         .optional(),
-
-    RABBITMQ_AUTO_CREATE_QUEUES:
-      Joi.boolean()
-        .truthy(
-          "true",
-          "1",
-        )
-        .falsy(
-          "false",
-          "0",
-        )
-        .default(true),
 
     RABBITMQ_AUTO_RECOVER:
       Joi.boolean()
@@ -132,52 +128,73 @@ export const configValidationSchema =
     // Logging
     // =========================================================================
 
-    LOG_LEVEL: Joi.string()
-      .valid(
-        "trace",
-        "debug",
-        "info",
-        "warn",
-        "error",
-        "fatal",
-      )
-      .default("info"),
+    LOG_LEVEL:
+      Joi.string()
+        .valid(
+          "trace",
+          "debug",
+          "info",
+          "warn",
+          "error",
+          "fatal",
+        )
+        .default("info"),
 
-    LOG_STDOUT: Joi.boolean()
-      .truthy(
-        "true",
-        "1",
-      )
-      .falsy(
-        "false",
-        "0",
-      )
-      .default(true),
+    LOG_STDOUT:
+      Joi.boolean()
+        .truthy(
+          "true",
+          "1",
+        )
+        .falsy(
+          "false",
+          "0",
+        )
+        .default(true),
 
-    LOG_FILE: Joi.string()
-      .allow("")
-      .default(""),
+    LOG_FILE_ENABLED:
+      Joi.boolean()
+        .truthy(
+          "true",
+          "1",
+        )
+        .falsy(
+          "false",
+          "0",
+        )
+        .default(false),
+
+    LOG_FILE_PATH:
+      Joi.string()
+        .default(
+          "/var/log/pague/outbox-publisher/application.log",
+        ),
 
     // =========================================================================
     // OpenTelemetry
     // =========================================================================
 
-    OTEL_ENABLED: Joi.boolean()
-      .truthy(
-        "true",
-        "1",
-      )
-      .falsy(
-        "false",
-        "0",
-      )
-      .default(false),
+    OTEL_ENABLED:
+      Joi.boolean()
+        .truthy(
+          "true",
+          "1",
+        )
+        .falsy(
+          "false",
+          "0",
+        )
+        .default(false),
 
-    OTEL_SERVICE_NAME: Joi.string()
-      .default("outbox-publisher"),
+    OTEL_SERVICE_NAME:
+      Joi.string()
+        .default(
+          "outbox-publisher",
+        ),
 
-    OTEL_SERVICE_VERSION: Joi.string()
-      .default("1.0.0"),
+    OTEL_SERVICE_VERSION:
+      Joi.string()
+        .default("1.0.0"),
 
     OTEL_TRACES_ENDPOINT:
       Joi.string()
@@ -194,7 +211,7 @@ export const configValidationSchema =
         .allow("")
         .default(""),
 
-    OTEL_METRICS_EXPORT_INTERVAL_MILLIS:
+    OTEL_EXPORT_INTERVAL_MILLIS:
       Joi.number()
         .integer()
         .min(100)

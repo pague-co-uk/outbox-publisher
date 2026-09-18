@@ -55,12 +55,6 @@ enum MessageStatus {
   EXPIRED
 }
 
-enum MessageAttemptStatus {
-  PENDING
-  SUBMITTED
-  FAILED
-}
-
 enum LedgerTransactionType {
   TOPUP
   DEBIT
@@ -130,6 +124,44 @@ enum AuthenticationMethod {
   SESSION
   SMPP
   SYSTEM
+}
+
+enum MobileNetworkStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum ConnectorTransport {
+  SMPP
+  HTTP
+}
+
+enum ConnectorStatus {
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum RouteStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum MessageRoutingStatus {
+  PENDING
+  ROUTING
+  SUBMITTED
+  FAILED
+  UNKNOWN
+}
+
+enum MessageRouteAttemptStatus {
+  PENDING
+  DISPATCHED
+  SUBMITTING
+  SUBMITTED
+  FAILED
+  UNKNOWN
 }
 
 model VerificationChallenge {
@@ -223,6 +255,7 @@ model Client {
   messages             Message[]
   smppAccounts         SmppAccount[]
   senderIds            SenderId[]
+  routes               Route[]
   webhookEndpoints     WebhookEndpoint[]
   auditLogs            AuditLog[]
 
@@ -578,8 +611,8 @@ model Message {
   client   Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
   senderId SenderId? @relation(fields: [senderIdId], references: [id], onDelete: SetNull)
 
-  attempts     MessageAttempt[]
-  statusEvents MessageStatusEvent[]
+  routeAttempts MessageRouteAttempt[]
+  statusEvents  MessageStatusEvent[]
 
   /// Recipient
   destination String @db.VarChar(20)
@@ -594,40 +627,54 @@ model Message {
   /// Current State
   currentStatus MessageStatus @default(QUEUED)
 
+  /// Routing State
+  routingStatus MessageRoutingStatus @default(PENDING)
+
+  currentAttemptNumber Int @default(0)
+
   /// Submission
-  submittedAt DateTime @default(now())
+  submittedAt DateTime?
 
   /// Audit
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   webhookDeliveries WebhookDelivery[]
 
   @@index([clientId])
   @@index([destination])
   @@index([currentStatus])
+  @@index([routingStatus])
   @@index([submittedAt])
   @@map("messages")
 }
 
-model MessageAttempt {
+model MessageRouteAttempt {
   /// Primary Key
   id String @id @default(uuid()) @db.Char(36)
 
   /// Foreign Keys
-  messageId String @db.Char(36)
+  messageId   String @db.Char(36)
+  routeId     String @db.Char(36)
+  connectorId String @db.Char(36)
 
   /// Relationships
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
+  route Route @relation(fields: [routeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  connector Connector @relation(fields: [connectorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  messageStatusEvents MessageStatusEvent[]
+
   /// Attempt
   attemptNumber Int
 
-  status MessageAttemptStatus @default(PENDING)
+  /// Routing snapshot
+  priority Int
 
-  /// Routing
-  provider String @db.VarChar(50)
-
-  route String? @db.VarChar(100)
+  /// State
+  status MessageRouteAttemptStatus @default(PENDING)
 
   /// Provider
   providerMessageId String? @db.VarChar(100)
@@ -638,20 +685,29 @@ model MessageAttempt {
   errorMessage String? @db.VarChar(255)
 
   /// Timing
-  startedAt DateTime @default(now())
+  dispatchedAt DateTime?
+
+  startedAt DateTime?
+
+  submittedAt DateTime?
+
+  failedAt DateTime?
 
   completedAt DateTime?
 
   /// Audit
-  createdAt           DateTime             @default(now())
-  messageStatusEvents MessageStatusEvent[]
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
 
   @@unique([messageId, attemptNumber])
+  @@unique([messageId, routeId])
   @@index([messageId])
+  @@index([routeId])
+  @@index([connectorId])
   @@index([status])
-  @@index([provider])
   @@index([providerMessageId])
-  @@map("message_attempts")
+  @@map("message_route_attempts")
 }
 
 model MessageStatusEvent {
@@ -666,10 +722,9 @@ model MessageStatusEvent {
   /// Relationships
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  attempt MessageAttempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-
+  attempt MessageRouteAttempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   /// Status
-  status MessageStatus
+  status  MessageStatus
 
   /// Source
   source String @db.VarChar(50)
@@ -691,23 +746,31 @@ model MessageStatusEvent {
 
 model SmppAccount {
   /// Primary Key
+
   id String @id @default(uuid()) @db.Char(36)
 
   /// Public Identifier
+
   publicId String @unique @db.VarChar(20)
 
   /// Foreign Keys
+
   clientId String @db.Char(36)
 
   /// Relationships
+
   client Client @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
+  ipAllowlist SmppAccountIpAllowlist[]
+
   /// Credentials
+
   systemId String @unique @db.VarChar(50)
 
   passwordHash String @db.VarChar(255)
 
   /// Configuration
+
   status SmppAccountStatus @default(ACTIVE)
 
   maxConcurrentBinds Int @default(1)
@@ -715,6 +778,7 @@ model SmppAccount {
   enquireLinkInterval Int @default(30)
 
   /// Audit
+
   createdAt DateTime @default(now())
 
   updatedAt DateTime @updatedAt
@@ -722,6 +786,34 @@ model SmppAccount {
   @@index([clientId])
   @@index([status])
   @@map("smpp_accounts")
+}
+
+model SmppAccountIpAllowlist {
+  /// Primary Key
+
+  id String @id @default(uuid()) @db.Char(36)
+
+  /// Foreign Keys
+
+  smppAccountId String @db.Char(36)
+
+  /// Relationships
+
+  smppAccount SmppAccount @relation(fields: [smppAccountId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  /// Network
+
+  ipAddress String @db.VarChar(45)
+
+  /// Audit
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([smppAccountId, ipAddress])
+  @@index([smppAccountId])
+  @@map("smpp_account_ip_allowlist")
 }
 
 model SenderId {
@@ -932,4 +1024,141 @@ model OutboxEvent {
   @@index([aggregateType, aggregateId])
   @@index([eventType])
   @@map("outbox_events")
+}
+
+model MobileNetwork {
+  id String @id @default(uuid()) @db.Char(36)
+
+  publicId String @unique @db.VarChar(20)
+
+  name String @db.VarChar(100)
+
+  code String @unique @db.VarChar(50)
+
+  countryId String @db.Char(36)
+
+  country Country @relation(fields: [countryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// Regular expression describing the numbering range
+
+  /// allocated to this mobile network.
+
+  ///
+
+  /// Example:
+
+  /// ^265(?:88|89|90)
+
+  routingRegex String? @db.VarChar(500)
+
+  status MobileNetworkStatus @default(ACTIVE)
+
+  routes Route[]
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@index([countryId])
+  @@index([status])
+  @@map("mobile_networks")
+}
+
+model Connector {
+  id String @id @default(uuid()) @db.Char(36)
+
+  publicId String @unique @db.VarChar(20)
+
+  name String @db.VarChar(100)
+
+  code String @unique @db.VarChar(50)
+
+  provider String @db.VarChar(100)
+
+  transport ConnectorTransport
+
+  status ConnectorStatus @default(ACTIVE)
+
+  configuration Json?
+
+  routes Route[]
+
+  messageRouteAttempts MessageRouteAttempt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([provider])
+  @@index([transport])
+  @@index([status])
+  @@map("connectors")
+}
+
+model Route {
+  id String @id @default(uuid()) @db.Char(36)
+
+  publicId String @unique @db.VarChar(20)
+
+  clientId String @db.Char(36)
+
+  mobileNetworkId String @db.Char(36)
+
+  connectorId String @db.Char(36)
+
+  priority Int
+
+  status RouteStatus @default(ACTIVE)
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  mobileNetwork MobileNetwork @relation(fields: [mobileNetworkId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  connector Connector @relation(fields: [connectorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  messageRouteAttempts MessageRouteAttempt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, mobileNetworkId, priority])
+  @@index([clientId])
+  @@index([mobileNetworkId])
+  @@index([connectorId])
+  @@index([status])
+  @@index([clientId, mobileNetworkId, status, priority])
+  @@map("routes")
+}
+
+model Country {
+  id String @id @default(uuid()) @db.Char(36)
+
+  code String @unique @db.Char(2)
+
+  name String @unique @db.VarChar(100)
+
+  callingCodes CountryCallingCode[]
+
+  mobileNetworks MobileNetwork[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("countries")
+}
+
+model CountryCallingCode {
+  id String @id @default(uuid()) @db.Char(36)
+
+  countryId String @db.Char(36)
+
+  callingCode String @db.VarChar(10)
+
+  country Country @relation(fields: [countryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([countryId, callingCode])
+  @@index([callingCode])
+  @@map("country_calling_codes")
 }

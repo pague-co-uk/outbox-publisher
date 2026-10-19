@@ -1,3 +1,4 @@
+import { outboxLogContext } from "./outbox-log-context.js";
 import {
   Inject,
   Injectable,
@@ -280,6 +281,8 @@ export class OutboxPublisher
 
           this.logger.info(
             {
+              ...outboxLogContext(event),
+              event: "outbox.event.published",
               eventId:
                 event.id,
 
@@ -341,6 +344,8 @@ export class OutboxPublisher
 
       this.logger.error(
         {
+          ...outboxLogContext(event),
+          event: "outbox.publication.failed",
           eventId:
             event.id,
 
@@ -375,6 +380,8 @@ export class OutboxPublisher
 
     this.logger.warn(
       {
+        ...outboxLogContext(event),
+        event: "outbox.publication.retry_scheduled",
         eventId:
           event.id,
 
@@ -388,7 +395,7 @@ export class OutboxPublisher
 
         err: error,
       },
-      "Outbox event scheduled for retry.",
+      "Outbox publication failed; broker publication retry scheduled.",
     );
   }
 

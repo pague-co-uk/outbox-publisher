@@ -41,6 +41,15 @@ export class OutboxEventRepository
   // Claim pending events
   // =========================================================================
 
+  /** Read-only aggregate; sampled at most once per configured interval, never on metric export. */
+  async metricsSnapshot() {
+    return this.db.outboxEvent.groupBy({
+      by: ['status', 'eventType'],
+      _count: { _all: true },
+      _min: { availableAt: true },
+    });
+  }
+
   async claimPending(
     limit: number,
   ) {

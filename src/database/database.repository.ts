@@ -1,3 +1,4 @@
+import { getDatabaseLifecycle } from "@pague-co-uk/sms-gateway-telemetry";
 import {
   Prisma,
   PrismaClient,
@@ -82,32 +83,7 @@ export abstract class DatabaseRepository {
       DatabaseExecutionResult<TResult>
     >,
   ): Promise<TResult> {
-    const startedAt =
-      Date.now();
-
-    try {
-      const {
-        result,
-        rowsAffected,
-      } = await callback();
-
-      void startedAt;
-      void operation;
-      void model;
-      void rowsAffected;
-
-      return result;
-    } catch (error) {
-      /*
-       * Keep the repository infrastructure deliberately
-       * framework-agnostic.
-       *
-       * Logging/metrics/tracing can be added here later if
-       * the standalone application's database infrastructure
-       * requires it.
-       */
-      throw error;
-    }
+    return getDatabaseLifecycle().execute({ system: 'mysql', operation, table: model }, callback);
   }
 
   // =========================================================================

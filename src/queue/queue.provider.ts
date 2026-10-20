@@ -1,3 +1,4 @@
+import { instrumentQueueClient } from "@pague-co-uk/sms-gateway-telemetry";
 import {
   Provider,
 } from "@nestjs/common";
@@ -39,9 +40,7 @@ export const queueProvider: Provider = {
 
     try {
       const client =
-        createQueueClient(
-          config.rabbitmq,
-        );
+        instrumentQueueClient(createQueueClient(config.rabbitmq,));
 
       await client.connect();
 

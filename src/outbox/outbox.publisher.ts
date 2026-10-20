@@ -1,3 +1,4 @@
+import { OutboxMetrics, type PublicationOutcome } from "./outbox.metrics.js";
 import { outboxLogContext } from "./outbox-log-context.js";
 import {
   Inject,
@@ -33,6 +34,8 @@ export class OutboxPublisher
     getComponentLogger(
       OutboxPublisher.name,
     );
+
+  private readonly metrics = new OutboxMetrics();
 
   private running = false;
 
@@ -120,6 +123,8 @@ export class OutboxPublisher
     if (!this.running) {
       return;
     }
+
+    void this.metrics.refreshSnapshot(() => this.outbox.metricsSnapshot());
 
     const startedAt =
       Date.now();
@@ -269,16 +274,19 @@ export class OutboxPublisher
             event.attempts,
         });
 
+        const started = performance.now();
+        let outcome: PublicationOutcome = 'persistence_error';
         try {
           await this.queue.publish(
             event.queueName,
             event.payload,
           );
 
-          await this.outbox.markPublished(
+          const persisted = await this.outbox.markPublished(
             event.id,
           );
 
+          outcome = persisted.count > 0 ? 'published' : 'state_not_changed';
           this.logger.info(
             {
               ...outboxLogContext(event),
@@ -300,10 +308,12 @@ export class OutboxPublisher
         } catch (error) {
           recordException(error);
 
-          await this.handlePublishFailure(
+          outcome = await this.handlePublishFailure(
             event,
             error,
           );
+        } finally {
+          this.metrics.attempt(event.eventType, event.attempts, outcome, performance.now() - started);
         }
       },
     );
@@ -322,7 +332,7 @@ export class OutboxPublisher
       >
     >[number],
     error: unknown,
-  ): Promise<void> {
+  ): Promise<PublicationOutcome> {
     const attempts =
       event.attempts;
 
@@ -336,7 +346,7 @@ export class OutboxPublisher
       this.config.outbox
         .maxAttempts
     ) {
-      await this.outbox.markFailed(
+      const persisted = await this.outbox.markFailed(
         event.id,
         message,
         new Date(),
@@ -359,7 +369,7 @@ export class OutboxPublisher
         "Outbox event permanently failed.",
       );
 
-      return;
+      return persisted.count > 0 ? 'permanently_failed' : 'state_not_changed';
     }
 
     const delay =
@@ -372,7 +382,7 @@ export class OutboxPublisher
         Date.now() + delay,
       );
 
-    await this.outbox.markRetry(
+    const persisted = await this.outbox.markRetry(
       event.id,
       message,
       availableAt,
@@ -397,6 +407,7 @@ export class OutboxPublisher
       },
       "Outbox publication failed; broker publication retry scheduled.",
     );
+    return persisted.count > 0 ? 'retry_scheduled' : 'state_not_changed';
   }
 
   // =========================================================================
@@ -420,6 +431,7 @@ export class OutboxPublisher
         now,
       );
 
+    this.metrics.recovery(result.count);
     if (
       result.count > 0
     ) {
